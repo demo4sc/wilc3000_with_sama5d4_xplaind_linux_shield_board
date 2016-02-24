@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------------
 #         ATMEL Microcontroller
 # ----------------------------------------------------------------------------
-# Copyright (c) 2015, Atmel Corporation
+# Copyright (c) 2013, Atmel Corporation
 #
 # All rights reserved.
 #
@@ -33,8 +33,6 @@
 set at91_base_dbgu0 0xfffff200
 # DBGU address for 9263, 9g45, sama5d3
 set at91_base_dbgu1 0xffffee00
-# DBGU address for sama5d4
-set at91_base_dbgu2 0xfc069000
 
 set arch_exid_offset 0x44
 
@@ -63,14 +61,6 @@ array set sama5d3_variant {
    0x00004301 sama5d36
 }
 
-## Find out sama5d4 variant
-array set sama5d4_variant {
-   0x00000001 sama5d41
-   0x00000002 sama5d42
-   0x00000003 sama5d43
-   0x00000004 sama5d44
-}
-
 ################################################################################
 #  proc uboot_env: Convert u-boot variables in a string ready to be flashed
 #                  in the region reserved for environment variables
@@ -94,15 +84,17 @@ proc set_uboot_env {nameOfLstOfVar} {
 proc find_variant_name {boardType} {
    global at91_base_dbgu0
    global at91_base_dbgu1
-   global at91_base_dbgu2
    global arch_exid_offset
    global at91sam9x5_variant
    global sama5d3_variant
-   global sama5d4_variant
-   set socName "none"
+   set socName "$boardType"
 
+   puts "-I- === name before swith $boardType ==="
    switch $boardType {
-      at91sam9x5ek {
+      at91sam9g45 {
+         set socName "at91sam9m10g45"
+      }
+      at91sam9x5 {
          set exidAddr [expr {$at91_base_dbgu0 + $arch_exid_offset}]
          set chip_variant [format "0x%08x" [read_int $exidAddr]]
          
@@ -113,48 +105,12 @@ proc find_variant_name {boardType} {
             }
          }
       }
-      sama5d3xek {
+      sama5d3 {
          set exidAddr [expr {$at91_base_dbgu1 + $arch_exid_offset}]
          set chip_variant [format "0x%08x" [read_int $exidAddr]]
          
          foreach {key value} [array get sama5d3_variant] {
-            #puts "-I- === $chip_variant ? $key ($value) ==="
-            if {$key == $chip_variant} {
-               set socName "$value"
-               break;
-            }
-         }
-      }
-      sama5d3_xplained {
-         set exidAddr [expr {$at91_base_dbgu1 + $arch_exid_offset}]
-         set chip_variant [format "0x%08x" [read_int $exidAddr]]
-         
-         foreach {key value} [array get sama5d3_variant] {
-            #puts "-I- === $chip_variant ? $key ($value) ==="
-            if {$key == $chip_variant} {
-               set socName "$value"
-               break;
-            }
-         }
-      }
-      sama5d4ek {
-         set exidAddr [expr {$at91_base_dbgu2 + $arch_exid_offset}]
-         set chip_variant [format "0x%08x" [read_int $exidAddr]]
-         
-         foreach {key value} [array get sama5d4_variant] {
-            #puts "-I- === $chip_variant ? $key ($value) ==="
-            if {$key == $chip_variant} {
-               set socName "$value"
-               break;
-            }
-         }
-      }
-      sama5d4_xplained {
-         set exidAddr [expr {$at91_base_dbgu2 + $arch_exid_offset}]
-         set chip_variant [format "0x%08x" [read_int $exidAddr]]
-         
-         foreach {key value} [array get sama5d4_variant] {
-            #puts "-I- === $chip_variant ? $key ($value) ==="
+            puts "-I- === $chip_variant ? $key ($value) ==="
             if {$key == $chip_variant} {
                set socName "$value"
                break;
@@ -163,29 +119,31 @@ proc find_variant_name {boardType} {
       }
    }
 
+   puts "-I- === socName is $socName ==="
    return "$socName"
 }
 
 proc find_variant_ecc {boardType} {
    set eccType "none"
 
+   puts "-I- === ecc before swith $boardType ==="
    switch $boardType {
-      at91sam9x5ek {
+      at91sam9x5 {
          set eccType 0xc0c00405
       }
-      at91sam9n12ek {
+      at91sam9n12 {
          set eccType 0xc0c00405
       }
-      sama5d3xek {
+      at91-sama5d3 {
          set eccType 0xc0902405
       }
-      sama5d3_xplained {
+      sama5d3 {
          set eccType 0xc0902405
       }
-      sama5d4ek {
+      at91-sama5d4 {
          set eccType 0xc1e04e07
       }
-      sama5d4_xplained {
+      sama5d4 {
          set eccType 0xc1e04e07
       }
    }
@@ -198,7 +156,7 @@ proc get_kernel_load_addr {boardType} {
    set kernel_load_addr 0x22000000
 
    switch $boardType {
-      at91sam9m10g45ek {
+      at91sam9g45 {
          set kernel_load_addr 0x72000000
       }
    }
@@ -210,7 +168,7 @@ proc get_dtb_load_addr {boardType} {
    set dtb_load_addr 0x21000000
 
    switch $boardType {
-      at91sam9m10g45ek {
+      at91sam9g45 {
          set dtb_load_addr 0x71000000
       }
    }
@@ -229,20 +187,28 @@ proc get_dtb_load_addr {boardType} {
 if {! [info exists boardFamily]} {
    puts "-E- === Board family not defined ==="
    exit
-} else {
-   puts "-I- === Board Family is $boardFamily ==="
 }
 
 set variant_name [find_variant_name $boardFamily]
 
 if {$variant_name == "none"} {
-   puts "-I- === No SoC variant specified ==="
+   puts "-E- === Unknown SoC variant ==="
    exit
 } else {
-   puts "-I- === Chip variant is $variant_name ==="
+   puts "-I- Chip variant is $variant_name"
+}
+if {$board_suffix == "none"} {
+   puts "-E- === Unknown $variant_name board ==="
+   exit
+} else {
+   puts "-I- Board variant is $board_suffix"
 }
 
 set pmeccConfig [find_variant_ecc $boardFamily]
+
+## Additional files to load
+append dtbFile $variant_name $board_suffix ".dtb"
+set ubootEnvFile	"ubootEnvtFileNandFlash.bin"
 
 ## Now check for the needed files
 if {! [file exists $bootstrapFile]} {
@@ -260,9 +226,11 @@ if {! [file exists $kernelFile]} {
    exit
 }
 
-if {! [file exists $dtbFile]} {
-   puts "-E- === Device Tree binary: $dtbFile file not found ==="
-   exit
+if {$use_dtb == "yes"} {
+   if {! [file exists $dtbFile]} {
+      puts "-E- === Unknown $variant_name + board $board_suffix combination ==="
+      exit
+   }
 }
 
 if {! [file exists $rootfsFile]} {
@@ -284,9 +252,12 @@ set dtbLoadAddr	[get_dtb_load_addr $boardFamily]
 
 ## NandFlash Mapping
 set kernelSize	[format "0x%08X" [file size $kernelFile]]
-set dtbSize	[format "0x%08X" [file size $dtbFile]]
-set bootCmd "bootcmd=nand read $dtbLoadAddr $dtbAddr $dtbSize; nand read $kernelLoadAddr $kernelAddr $kernelSize; bootz $kernelLoadAddr - $dtbLoadAddr"
-set rootfsSize	[format "0x%08X" [file size $rootfsFile]]
+if {$use_dtb == "yes"} {
+   set dtbSize	[format "0x%08X" [file size $dtbFile]]
+   set bootCmd "bootcmd=nand read $dtbLoadAddr $dtbAddr $dtbSize; nand read $kernelLoadAddr $kernelAddr $kernelSize; bootz $kernelLoadAddr - $dtbLoadAddr"
+} else {
+   set bootCmd "bootcmd=nand read $kernelLoadAddr $kernelAddr $kernelSize; bootz $kernelLoadAddr"
+}
 
 lappend u_boot_variables \
     "bootdelay=1" \
@@ -294,14 +265,10 @@ lappend u_boot_variables \
     "stdin=serial" \
     "stdout=serial" \
     "stderr=serial" \
-    "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,256k(env),256k(env_redundant),256k(spare),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw $videoMode" \
+    "bootargs=console=ttyS0,115200 mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,256k(env),256k(env_redundant),256k(spare),512k(dtb),6M(kernel)ro,-(rootfs) rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw" \
     "$bootCmd"
 
-## Additional files to load
-set ubootEnvFile	"ubootEnvtFileNandFlash.bin"
 
-
-##  Start flashing procedure  ##################################################
 puts "-I- === Initialize the NAND access ==="
 NANDFLASH::Init
 
@@ -313,14 +280,14 @@ if {$pmeccConfig != "none"} {
 puts "-I- === Erase all the NAND flash blocs and test the erasing ==="
 NANDFLASH::EraseAllNandFlash
 
-puts "-I- === Load AT91Bootstrap in the first sector ==="
+puts "-I- === Load the bootstrap in the first sector ==="
 if {$pmeccConfig != "none"} {
    NANDFLASH::SendBootFilePmeccCmd $bootstrapFile
 } else {
    NANDFLASH::sendBootFile $bootstrapFile
 }
 
-puts "-I- === Load u-boot in the next sectors ==="
+puts "-I- === Load the u-boot in the next sectors ==="
 send_file {NandFlash} "$ubootFile" $ubootAddr 0 
 
 if {$build_uboot_env == "yes"} {
@@ -333,7 +300,10 @@ if {$build_uboot_env == "yes"} {
 }
 
 puts "-I- === Load the Kernel image and device tree database ==="
-send_file {NandFlash} "$dtbFile" $dtbAddr 0
+
+if {$use_dtb == "yes"} {
+   send_file {NandFlash} "$dtbFile" $dtbAddr 0
+}
 send_file {NandFlash} "$kernelFile" $kernelAddr 0
 
 if {$pmeccConfig != "none"} {
